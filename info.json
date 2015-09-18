@@ -1,0 +1,9 @@
+{
+	"name":"TheFatController",
+	"author":"JamesOFarrell",
+	"version":"0.2.4",
+	"title":"The Fat Controller",
+	"homepage":"http://en.wikipedia.org/wiki/The_Fat_Controller",
+	"description":"A conductor of trains.",
+	"dependencies": ["base >= 0.12.0"]
+}
