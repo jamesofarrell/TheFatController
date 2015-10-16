@@ -251,9 +251,32 @@ function alertPlayer(player,guiSettings,tick,message)
 		player.print(message)
 	end
 end
--- script.on_init(function()
+
+script.on_init(function()
 	-- debugLog("init")
--- end)
+
+	for _,force in pairs(game.forces) do
+		if force.technologies["rail-signals"].researched then
+			global.unlocked = true
+		end
+	end
+
+	for i,player in ipairs(game.players) do
+		if global.guiSettings[i] == nil then
+			--debugLog("Player: " .. i)
+			global.guiSettings[i] = init(player, global.guiSettings[i])
+		end
+	end
+
+end)
+
+script.on_event(defines.events.on_research_finished, function(research)
+
+	if research.name == "rails-signals" then
+		global.unlocked = true
+	end
+
+end)
 
 loadGame = function ()
 	-- debugLog("LOADGAME!")
@@ -274,12 +297,6 @@ loadGame = function ()
 		global.guiSettings = nil
 		global.unlocked = nil
 	end
-
-	for _,force in pairs(game.forces) do
-		if force.technologies["rail-signals"].researched then
-			global.unlocked = true
-		end
-	end
 	if global.unlocked then
 		script.on_event(defines.events.on_tick, onTickAfterUnlocked)
 	end
@@ -297,12 +314,6 @@ loadGame = function ()
 		
 		if global.guiSettings == nil then global.guiSettings = {} end
 		
-		for i,player in ipairs(game.players) do
-			if global.guiSettings[i] == nil then
-				--debugLog("Player: " .. i)
-				global.guiSettings[i] = init(player, global.guiSettings[i])
-			end
-		end
 		script.on_event(defines.events.on_tick, onTickAfterUnlocked)
 	end
 end
