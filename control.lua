@@ -92,7 +92,7 @@ onTickAfterUnlocked = function(event)
 				global.guiSettings[i] = init(player, global.guiSettings[i])
 			end
 		end
-		game.on_event(defines.events.on_tick, onTickAfterUnlocked)
+		script.on_event(defines.events.on_tick, onTickAfterUnlocked)
 	end
 	
 	if event.tick%60==13 then
@@ -251,7 +251,7 @@ function alertPlayer(player,guiSettings,tick,message)
 		player.print(message)
 	end
 end
--- game.on_init(function()
+-- script.on_init(function()
 	-- debugLog("init")
 -- end)
 
@@ -281,7 +281,7 @@ loadGame = function ()
 		end
 	end
 	if global.unlocked then
-		game.on_event(defines.events.on_tick, onTickAfterUnlocked)
+		script.on_event(defines.events.on_tick, onTickAfterUnlocked)
 	end
 		
 	
@@ -303,11 +303,11 @@ loadGame = function ()
 				global.guiSettings[i] = init(player, global.guiSettings[i])
 			end
 		end
-		game.on_event(defines.events.on_tick, onTickAfterUnlocked)
+		script.on_event(defines.events.on_tick, onTickAfterUnlocked)
 	end
 end
 
-game.on_event(defines.events.on_player_created, function(event)
+script.on_event(defines.events.on_player_created, function(event)
 	if global.unlocked then
 		if global.guiSettings == nil then 
 			global.guiSettings = {} 
@@ -329,15 +329,15 @@ onTickBeforeUnlocked = function(event)
 			end
 			
 			if global.unlocked then
-				game.on_event(defines.events.on_tick, onTickAfterUnlocked)
+				script.on_event(defines.events.on_tick, onTickAfterUnlocked)
 			end
 		end
 	end
 end
 
-game.on_event(defines.events.on_tick,onTickBeforeUnlocked)
+script.on_event(defines.events.on_tick,onTickBeforeUnlocked)
 
-game.on_load(loadGame)
+script.on_load(loadGame)
 
 function destroyGui(guiA)
 	if guiA ~= nil and guiA.valid then
@@ -397,10 +397,10 @@ entityBuilt = function(event)
 	end
 end
 
-game.on_event(defines.events.on_built_entity, entityBuilt)
-game.on_event(defines.events.on_robot_built_entity, entityBuilt)
+script.on_event(defines.events.on_built_entity, entityBuilt)
+script.on_event(defines.events.on_robot_built_entity, entityBuilt)
 
-game.on_event(defines.events.on_force_created, function(event)
+script.on_event(defines.events.on_force_created, function(event)
 	if global.trainsByForce ~= nil then
 		global.trainsByForce[event.force.name] = {}
 	end
@@ -427,7 +427,7 @@ end)
   -- -- train was switched to auto control but it is moving and needs to be stopped
   -- stop_for_auto_control = 10
 
-game.on_event(defines.events.on_train_changed_state, function(event)
+script.on_event(defines.events.on_train_changed_state, function(event)
 	--debugLog("State Change - " .. game.tick)
 	if not global.unlocked then --This is retarded, just set the event on unlock
 		return
@@ -477,7 +477,7 @@ function getTrainInfoOrNewFromEntity(trains, entity)
 	end
 end
 
-game.on_event(defines.events.on_gui_click, function(event)
+script.on_event(defines.events.on_gui_click, function(event)
 	if not global.unlocked then --This is retarded, just set the event on unlock
 		return
 	end
@@ -839,9 +839,9 @@ function refreshAllTrainInfoGuis(trainsByForce, guiSettings, players, destroy)
 	end
 end
 
-game.on_event(defines.events.on_entity_died, onEntityDied)
+script.on_event(defines.events.on_entity_died, onEntityDied)
 
-game.on_event(defines.events.on_preplayer_mined_item, onEntityDied)
+script.on_event(defines.events.on_preplayer_mined_item, onEntityDied)
 
 function isUnlocked(technologies)
 	return technologies["rail-signals"].researched 
