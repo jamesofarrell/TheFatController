@@ -254,21 +254,9 @@ end
 
 script.on_init(function()
 	-- debugLog("init")
-
-	for _,force in pairs(game.forces) do
-		if force.technologies["rail-signals"].researched then
-			global.unlocked = true
-		end
-	end
-
-	for i,player in ipairs(game.players) do
-		if global.guiSettings[i] == nil then
-			--debugLog("Player: " .. i)
-			global.guiSettings[i] = init(player, global.guiSettings[i])
-		end
-	end
-
-end)
+  script.on_event(defines.events.on_tick,onTickBeforeUnlocked)
+  loadGame()
+  end)
 
 script.on_event(defines.events.on_research_finished, function(research)
 
@@ -285,7 +273,7 @@ loadGame = function ()
 		
 	-- end
 	-- global.unlocked = global.tech.researched
-	
+  
 	-- Kill all old versions of TFC
 	if global.fatControllerGui ~= nil or global.fatControllerButtons ~= nil then
 		destroyGui(global.fatControllerGui)
@@ -297,16 +285,20 @@ loadGame = function ()
 		global.guiSettings = nil
 		global.unlocked = nil
 	end
+  for _,force in pairs(game.forces) do
+		if force.technologies["rail-signals"].researched then
+			global.unlocked = true
+		end
+	end
+
+	for i,player in ipairs(game.players) do
+		if global.guiSettings[i] == nil then
+			--debugLog("Player: " .. i)
+			global.guiSettings[i] = init(player, global.guiSettings[i])
+		end
+	end
 	if global.unlocked then
 		script.on_event(defines.events.on_tick, onTickAfterUnlocked)
-	end
-		
-	
-	if global.unlocked then
-		--debugLog("Unlocked!")
-		-- if global.trains == nil then 
-			-- global.trains = {}
-		-- end
 		
 		if global.trainsByForce == nil then 
 			global.trainsByForce = {}
@@ -346,9 +338,14 @@ onTickBeforeUnlocked = function(event)
 	end
 end
 
-script.on_event(defines.events.on_tick,onTickBeforeUnlocked)
+tickAfterLoad = function(event)
+  script.on_event(defines.events.on_tick,onTickBeforeUnlocked)
+  loadGame()
+end
 
-script.on_load(loadGame)
+script.on_load(function()
+  script.on_event(defines.events.on_tick, tickAfterLoad)
+end)
 
 function destroyGui(guiA)
 	if guiA ~= nil and guiA.valid then
@@ -927,11 +924,20 @@ function getHighestInventoryCount(trainInfo)
 					local liquid = remote.call("railtanker","getLiquidByWagon",carriage)
 					if liquid ~= nil and (largestItem.count == nil or liquid.amount > largestItem.count) then
 						debugLog("Oil!")
-						--if liquid.type == nil then liquid.type = "NILMotherFucker" end
-						
-						
-						largestItem.name = liquid.type
-						largestItem.count = math.floor(liquid.amount)
+            local name = liquid.type
+            local count = math.floor(liquid.amount)
+            if name then
+						if items[name] ~= nil then
+							items[name] = items[name] + count
+						else
+							items[name] = count
+							itemsCount = itemsCount + 1
+						end
+						if largestItem.count == nil or largestItem.count < items[name] then
+							largestItem.name = name
+							largestItem.count = items[name]
+						end
+            end
 					end
 				else
 					local inv = carriage.get_inventory(1)
@@ -1431,7 +1437,7 @@ function round(num, idp)
 end
 
 function debugLog(message)
-	if true then -- set for debug
+	if false then -- set for debug
 		for i,player in ipairs(game.players) do
 			player.print(message)
 		end
