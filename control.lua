@@ -1240,7 +1240,7 @@ end
 
 function refreshTrainInfoGui(trains, guiSettings, character)
 	local gui = guiSettings.fatControllerGui.trainInfo
-	if gui ~= nil then
+	if gui ~= nil and trains ~= nil then
 		local removeTrainInfo = {}
 		
 		local pageStart = ((guiSettings.page - 1) * guiSettings.displayCount) + 1
