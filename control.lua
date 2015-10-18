@@ -1,6 +1,12 @@
 require "defines"
 require "util"
 
+function initGlobal()
+  global = global or {}
+  global.guiSettings = global.guiSettings or {}
+  global.trainsByForce = global.trainsByForce or {}
+  global.character = global.charactor or {}
+end
 
 --Called if tech is unlocked
 function init(player, oldGuiSettings)
@@ -59,13 +65,8 @@ function init(player, oldGuiSettings)
 		-- global.trains = {}
 	-- end
 	
-	if global.trainsByForce == nil then
-		global.trainsByForce = {}
-	end
-	
-	if global.trainsByForce[forceName] == nil then
-		global.trainsByForce[forceName] = {}
-	end
+	global.trainsByForce = global.trainsByForce or {}
+  global.trainsByForce[forceName] = global.trainsByForce[forceName] or {}
 	
 	guiSettings.pageCount = getPageCount(global.trainsByForce[forceName], guiSettings) 
 	
@@ -78,21 +79,14 @@ function init(player, oldGuiSettings)
 end
 
 onTickAfterUnlocked = function(event)
-	if global.unlocked and (global.guiSetting == nil or global.trainsByForce == nil) then
+	if global.unlocked then
 		--debugLog("Unlocked!")
-		if global.trainsByForce == nil then 
-			global.trainsByForce = {}
-		end
-		
-		if global.guiSettings == nil then global.guiSettings = {} end
-		
 		for i,player in ipairs(game.players) do
 			if global.guiSettings[i] == nil then
 				--debugLog("Player: " .. i)
 				global.guiSettings[i] = init(player, global.guiSettings[i])
 			end
 		end
-		script.on_event(defines.events.on_tick, onTickAfterUnlocked)
 	end
 	
 	if event.tick%60==13 then
@@ -285,6 +279,7 @@ loadGame = function ()
 		global.guiSettings = nil
 		global.unlocked = nil
 	end
+  initGlobal()
   for _,force in pairs(game.forces) do
 		if force.technologies["rail-signals"].researched then
 			global.unlocked = true
@@ -298,14 +293,6 @@ loadGame = function ()
 		end
 	end
 	if global.unlocked then
-		script.on_event(defines.events.on_tick, onTickAfterUnlocked)
-		
-		if global.trainsByForce == nil then 
-			global.trainsByForce = {}
-		end
-		
-		if global.guiSettings == nil then global.guiSettings = {} end
-		
 		script.on_event(defines.events.on_tick, onTickAfterUnlocked)
 	end
 end
