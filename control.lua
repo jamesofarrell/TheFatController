@@ -325,13 +325,12 @@ onTickBeforeUnlocked = function(event)
 	end
 end
 
-tickAfterLoad = function(event)
-  script.on_event(defines.events.on_tick,onTickBeforeUnlocked)
-  loadGame()
-end
-
 script.on_load(function()
-  script.on_event(defines.events.on_tick, tickAfterLoad)
+  if global.unlocked then
+    script.on_event(defines.events.on_tick, onTickAfterUnlocked)
+  else
+    script.on_event(defines.events.on_tick,onTickBeforeUnlocked)
+  end
 end)
 
 function destroyGui(guiA)
