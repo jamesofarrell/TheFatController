@@ -154,160 +154,167 @@ function init_gui(player)
   return guiSettings
 end
 
-script.on_event(defines.events.on_research_finished, function(research)
-  if research.name == "rails-signals" then
-    global.unlockedByForce[research.force.name] = true
+script.on_event(defines.events.on_research_finished, function(event)
+  local status, err = pcall(on_research_finished, event)
+  if err then debugDump(err,true) end
+end)
+
+function on_research_finished(event)
+  if event.research.name == "rails-signals" then
+    global.unlockedByForce[event.research.force.name] = true
     global.unlocked = true
     script.on_event(defines.events.on_train_changed_state, on_train_changed_state)
     script.on_event(defines.events.on_tick, onTickAfterUnlocked)
     script.on_event(defines.events.on_gui_click, on_gui_click)
+    for _, p in pairs(event.research.force.players) do
+      init_gui(p)
+    end
   end
-  for _, p in pairs(research.force.players) do
-    init_gui(p)
-  end
-end)
+end
 
 onTickAfterUnlocked = function(event)
-  if event.tick%60==13 then
-    pageCount = -1
+  local status, err = pcall(function()
+    if event.tick%60==13 then
+      pageCount = -1
 
-    local updateGui = false
+      local updateGui = false
+      for i,guiSettings in pairs(global.guiSettings) do
+        if guiSettings.fatControllerGui ~= nil and guiSettings.fatControllerGui.trainInfo ~= nil then
+          updateGui = true
+        end
+      end
+      if updateGui then
+        debugLog("updateGUI")
+        for _,trains in pairs(global.trainsByForce) do
+          updateTrains(trains)
+        end
+        refreshAllTrainInfoGuis(global.trainsByForce, global.guiSettings, game.players, false)
+        for i,player in pairs(game.players) do
+          refreshTrainInfoGui(global.trainsByForce[player.force.name], global.guiSettings[i], player.character)
+          global.guiSettings[i].pageCount = getPageCount(global.trainsByForce[player.force.name], global.guiSettings[i])
+        end
+      end
+    end
+
+    --handle remote camera
     for i,guiSettings in pairs(global.guiSettings) do
-      if guiSettings.fatControllerGui ~= nil and guiSettings.fatControllerGui.trainInfo ~= nil then
-        updateGui = true
-      end
-    end
-    if updateGui then
-      debugLog("updateGUI")
-      for _,trains in pairs(global.trainsByForce) do
-        updateTrains(trains)
-      end
-      refreshAllTrainInfoGuis(global.trainsByForce, global.guiSettings, game.players, false)
-      for i,player in pairs(game.players) do
-        refreshTrainInfoGui(global.trainsByForce[player.force.name], global.guiSettings[i], player.character)
-        global.guiSettings[i].pageCount = getPageCount(global.trainsByForce[player.force.name], global.guiSettings[i])
-      end
-    end
-  end
-
-  --handle remote camera
-  for i,guiSettings in pairs(global.guiSettings) do
-    if guiSettings.followEntity ~= nil then -- Are we in remote camera mode?
-      if not guiSettings.followEntity.valid  or game.players[i].vehicle == nil then
-        swapPlayer(game.players[i], global.character[i])
-        if guiSettings.fatControllerButtons ~= nil and guiSettings.fatControllerButtons.returnToPlayer ~= nil then
-          guiSettings.fatControllerButtons.returnToPlayer.destroy()
-        end
-        if not guiSettings.followEntity.valid then
-          removeTrainInfoFromEntity(global.trainsByForce[game.players[i].force.name], guiSettings.followEntity)
-          newTrainInfoWindow(guiSettings)
-          refreshTrainInfoGui(global.trainsByForce[game.players[i].force.name], guiSettings, game.players[i].character)
-        end
-        global.character[i] = nil
-        guiSettings.followEntity = nil
+      if guiSettings.followEntity ~= nil then -- Are we in remote camera mode?
+        if not guiSettings.followEntity.valid  or game.players[i].vehicle == nil then
+          swapPlayer(game.players[i], global.character[i])
+          if guiSettings.fatControllerButtons ~= nil and guiSettings.fatControllerButtons.returnToPlayer ~= nil then
+            guiSettings.fatControllerButtons.returnToPlayer.destroy()
+          end
+          if not guiSettings.followEntity.valid then
+            removeTrainInfoFromEntity(global.trainsByForce[game.players[i].force.name], guiSettings.followEntity)
+            newTrainInfoWindow(guiSettings)
+            refreshTrainInfoGui(global.trainsByForce[game.players[i].force.name], guiSettings, game.players[i].character)
+          end
+          global.character[i] = nil
+          guiSettings.followEntity = nil
       elseif global.character[i] and global.character[i].valid and guiSettings.fatControllerButtons ~= nil and guiSettings.fatControllerButtons.returnToPlayer == nil then
         guiSettings.fatControllerButtons.add({ type="button", name="returnToPlayer", caption={"text-player"}, style = "fatcontroller_selected_button"})
-      --game.players[1].teleport(global.followEntity.position)
+        --game.players[1].teleport(global.followEntity.position)
       elseif global.character[i] ~= nil and not global.character[i].valid  then
         game.set_game_state({gamefinished=true, playerwon=false})
       end
-    end
-  end
-
-  -- on_the_path = 0,
-  -- -- had path and lost it - must stop
-  -- path_lost = 1,
-  -- -- doesn't have anywhere to go
-  -- no_schedule = 2,
-  -- has no path and is stopped
-  -- no_path = 3,
-  -- -- braking before the railSignal
-  -- arrive_signal = 4,
-  -- wait_signal = 5,
-  -- -- braking before the station
-  -- arrive_station = 6,
-  -- wait_station = 7,
-  -- -- switched to the manual control and has to stop
-  -- manual_control_stop = 8,
-  -- -- can move if user explicitly sits in and rides the train
-  -- manual_control = 9,
-  -- -- train was switched to auto control but it is moving and needs to be stopped
-  -- stop_for_auto_control = 10
-
-  if event.tick%120 == 37 then
-    local alarmState = {}
-    alarmState.timeToStation = false
-    alarmState.timeAtSignal = false
-    alarmState.noPath = false
-    local newAlarm = false
-    for forceName,trains in pairs(global.trainsByForce) do
-      for i,trainInfo in pairs(trains) do
-        local alarmSet = false
-        if trainInfo.lastState == 1 or trainInfo.lastState == 3 then
-          --game.players[1].print("No Path " .. i .. " " .. game.tick)
-          if not trainInfo.alarm then
-            alarmState.noPath = true
-            newAlarm = true
-            trainInfo.updated = true
-          end
-          alarmSet = true
-          trainInfo.alarm = true
-        end
-        -- 36000, 10 minutes
-        if trainInfo.lastState ~= 7 and trainInfo.lastStateStation ~= nil and (trainInfo.lastStateStation + 36000 < game.tick and (trainInfo.lastState ~= 2 or trainInfo.lastState ~= 8 or trainInfo.lastState ~= 9)) then
-          if not trainInfo.alarm then
-            alarmState.timeToStation = true
-            newAlarm = true
-            trainInfo.updated = true
-          end
-          alarmSet = true
-          trainInfo.alarm = true
-        end
-        -- 72002 minutes lol, wtf?
-        if trainInfo.lastState == 5 and (trainInfo.lastStateTick ~= nil and trainInfo.lastStateTick + 7200 < game.tick ) then
-          if not trainInfo.alarm then
-            alarmState.timeAtSignal = true
-            newAlarm = true
-            trainInfo.updated = true
-          end
-          alarmSet = true
-          trainInfo.alarm = true
-        end
-        if not alarmSet then
-          if trainInfo.alarm then
-            trainInfo.updated = true
-          end
-          trainInfo.alarm = false
-        end
       end
     end
 
-    for i,guiSettings in pairs(global.guiSettings) do
-      if guiSettings.alarm == nil or guiSettings.alarm.noPath == nil then
-        guiSettings.alarm = {}
-        guiSettings.alarm.timeToStation = true
-        guiSettings.alarm.timeAtSignal = true
-        guiSettings.alarm.noPath = true
+    -- on_the_path = 0,
+    -- -- had path and lost it - must stop
+    -- path_lost = 1,
+    -- -- doesn't have anywhere to go
+    -- no_schedule = 2,
+    -- has no path and is stopped
+    -- no_path = 3,
+    -- -- braking before the railSignal
+    -- arrive_signal = 4,
+    -- wait_signal = 5,
+    -- -- braking before the station
+    -- arrive_station = 6,
+    -- wait_station = 7,
+    -- -- switched to the manual control and has to stop
+    -- manual_control_stop = 8,
+    -- -- can move if user explicitly sits in and rides the train
+    -- manual_control = 9,
+    -- -- train was switched to auto control but it is moving and needs to be stopped
+    -- stop_for_auto_control = 10
+
+    if event.tick%120 == 37 then
+      local alarmState = {}
+      alarmState.timeToStation = false
+      alarmState.timeAtSignal = false
+      alarmState.noPath = false
+      local newAlarm = false
+      for forceName,trains in pairs(global.trainsByForce) do
+        for i,trainInfo in pairs(trains) do
+          local alarmSet = false
+          if trainInfo.lastState == 1 or trainInfo.lastState == 3 then
+            --game.players[1].print("No Path " .. i .. " " .. game.tick)
+            if not trainInfo.alarm then
+              alarmState.noPath = true
+              newAlarm = true
+              trainInfo.updated = true
+            end
+            alarmSet = true
+            trainInfo.alarm = true
+          end
+          -- 36000, 10 minutes
+          if trainInfo.lastState ~= 7 and trainInfo.lastStateStation ~= nil and (trainInfo.lastStateStation + 36000 < game.tick and (trainInfo.lastState ~= 2 or trainInfo.lastState ~= 8 or trainInfo.lastState ~= 9)) then
+            if not trainInfo.alarm then
+              alarmState.timeToStation = true
+              newAlarm = true
+              trainInfo.updated = true
+            end
+            alarmSet = true
+            trainInfo.alarm = true
+          end
+          -- 72002 minutes lol, wtf?
+          if trainInfo.lastState == 5 and (trainInfo.lastStateTick ~= nil and trainInfo.lastStateTick + 7200 < game.tick ) then
+            if not trainInfo.alarm then
+              alarmState.timeAtSignal = true
+              newAlarm = true
+              trainInfo.updated = true
+            end
+            alarmSet = true
+            trainInfo.alarm = true
+          end
+          if not alarmSet then
+            if trainInfo.alarm then
+              trainInfo.updated = true
+            end
+            trainInfo.alarm = false
+          end
+        end
       end
-      if (guiSettings.alarm.timeToStation or guiSettings.alarm.timeAtSignal or guiSettings.alarm.noPath) and newAlarm then
-        if guiSettings.alarm.timeToStation and alarmState.timeToStation then
-          guiSettings.alarm.active = true
-          alertPlayer(game.players[i], guiSettings, game.tick, ({"msg-alarm-tolongtostation"}))
+
+      for i,guiSettings in pairs(global.guiSettings) do
+        if guiSettings.alarm == nil or guiSettings.alarm.noPath == nil then
+          guiSettings.alarm = {}
+          guiSettings.alarm.timeToStation = true
+          guiSettings.alarm.timeAtSignal = true
+          guiSettings.alarm.noPath = true
         end
-        if guiSettings.alarm.timeAtSignal and alarmState.timeAtSignal then
-          guiSettings.alarm.active = true
-          alertPlayer(game.players[i], guiSettings, game.tick, ({"msg-alarm-tolongatsignal"}))
+        if (guiSettings.alarm.timeToStation or guiSettings.alarm.timeAtSignal or guiSettings.alarm.noPath) and newAlarm then
+          if guiSettings.alarm.timeToStation and alarmState.timeToStation then
+            guiSettings.alarm.active = true
+            alertPlayer(game.players[i], guiSettings, game.tick, ({"msg-alarm-tolongtostation"}))
+          end
+          if guiSettings.alarm.timeAtSignal and alarmState.timeAtSignal then
+            guiSettings.alarm.active = true
+            alertPlayer(game.players[i], guiSettings, game.tick, ({"msg-alarm-tolongatsignal"}))
+          end
+          if guiSettings.alarm.noPath and alarmState.noPath then
+            guiSettings.alarm.active = true
+            alertPlayer(game.players[i], guiSettings, game.tick, ({"msg-alarm-nopath"}))
+          end
+        else
+          guiSettings.alarm.active = false
         end
-        if guiSettings.alarm.noPath and alarmState.noPath then
-          guiSettings.alarm.active = true
-          alertPlayer(game.players[i], guiSettings, game.tick, ({"msg-alarm-nopath"}))
-        end
-      else
-        guiSettings.alarm.active = false
       end
     end
-  end
-
+  end)
+  if err then debugDump(err,true) end
   --if event.tick%30==4 and global.fatControllerGui.trainInfo ~= nil then
   --refreshTrainInfoGui(global.trains, global.fatControllerGui.trainInfo, global.guiSettings, game.players[1].character)
   --end
@@ -403,30 +410,33 @@ script.on_event(defines.events.on_robot_built_entity, entityBuilt)
 -- stop_for_auto_control = 10
 
 function on_train_changed_state(event)
-  --debugLog("State Change - " .. game.tick)
+  local status, err = pcall(function()
+    --debugLog("State Change - " .. game.tick)
 
-  local train = event.train
-  local entity = train.carriages[1]
+    local train = event.train
+    local entity = train.carriages[1]
 
-  if global.trainsByForce[entity.force.name] == nil then
-    global.trainsByForce[entity.force.name] = {}
-  end
-  trains = global.trainsByForce[entity.force.name]
-  local trainInfo = getTrainInfoOrNewFromEntity(trains, entity)
-  if trainInfo ~= nil then
-    local newtrain = false
-    if trainInfo.updated == nil then
-      newtrain = true
-    else
+    if global.trainsByForce[entity.force.name] == nil then
+      global.trainsByForce[entity.force.name] = {}
     end
-    updateTrainInfo(trainInfo,game.tick)
-    if newtrain then
-      for i,player in pairs(game.players) do
-        global.guiSettings[i].pageCount = getPageCount(trains, global.guiSettings[i])
+    trains = global.trainsByForce[entity.force.name]
+    local trainInfo = getTrainInfoOrNewFromEntity(trains, entity)
+    if trainInfo ~= nil then
+      local newtrain = false
+      if trainInfo.updated == nil then
+        newtrain = true
+      else
       end
+      updateTrainInfo(trainInfo,game.tick)
+      if newtrain then
+        for i,player in pairs(game.players) do
+          global.guiSettings[i].pageCount = getPageCount(trains, global.guiSettings[i])
+        end
+      end
+      refreshAllTrainInfoGuis(global.trainsByForce, global.guiSettings, game.players, newtrain)
     end
-    refreshAllTrainInfoGuis(global.trainsByForce, global.guiSettings, game.players, newtrain)
-  end
+  end)
+  if err then debugDump(err,true) end
 end
 
 function getTrainInfoOrNewFromEntity(trains, entity)
@@ -441,210 +451,213 @@ function getTrainInfoOrNewFromEntity(trains, entity)
 end
 
 function on_gui_click(event)
-  local refreshGui = false
-  local newInfoWindow = false
-  local rematchStationList = false
-  local guiSettings = global.guiSettings[event.element.player_index]
-  local player = game.players[event.element.player_index]
-  local trains = global.trainsByForce[player.force.name]
-  debugLog("CLICK! " .. event.element.name .. game.tick)
+  local status, err = pcall(function()
+    local refreshGui = false
+    local newInfoWindow = false
+    local rematchStationList = false
+    local guiSettings = global.guiSettings[event.element.player_index]
+    local player = game.players[event.element.player_index]
+    local trains = global.trainsByForce[player.force.name]
+    debugLog("CLICK! " .. event.element.name .. game.tick)
 
-  if guiSettings.alarm == nil then
-    guiSettings.alarm = {}
-  end
+    if guiSettings.alarm == nil then
+      guiSettings.alarm = {}
+    end
 
 
-  if event.element.name == "toggleTrainInfo" then
-    if guiSettings.fatControllerGui.trainInfo == nil then
-      newInfoWindow = true
-      refreshGui = true
-      event.element.caption = {"text-trains"}
-    else
-      guiSettings.fatControllerGui.trainInfo.destroy()
-      event.element.caption = {"text-trains-collapsed"}
-    end
-  elseif event.element.name == "returnToPlayer" then
-    if global.character[event.element.player_index] ~= nil then
-      if player.vehicle ~= nil then
-        player.vehicle.passenger = nil
-      end
-      swapPlayer(player, global.character[event.element.player_index])
-      global.character[event.element.player_index] = nil
-      event.element.destroy()
-      guiSettings.followEntity = nil
-    end
-  elseif endsWith(event.element.name,"_toggleManualMode") then
-    local trainInfo = getTrainInfoFromElementName(trains, event.element.name)
-    if trainInfo ~= nil and trainInfo.train ~= nil and trainInfo.train.valid then
-      trainInfo.train.manual_mode = not trainInfo.train.manual_mode
-      swapCaption(event.element, "ll", ">")
-    end
-  elseif endsWith(event.element.name,"_toggleFollowMode") then
-    local trainInfo = getTrainInfoFromElementName(trains, event.element.name)
-    if trainInfo ~= nil and trainInfo.train ~= nil and trainInfo.train.valid then
-      if global.character[event.element.player_index] == nil then --Move to train
-        if trainInfo.train.carriages[1].passenger ~= nil then
-          player.print({"msg-intrain"})
+    if event.element.name == "toggleTrainInfo" then
+      if guiSettings.fatControllerGui.trainInfo == nil then
+        newInfoWindow = true
+        refreshGui = true
+        event.element.caption = {"text-trains"}
       else
-        global.character[event.element.player_index] = player.character
-        guiSettings.followEntity = trainInfo.train.carriages[1] -- HERE
-
-        --fatControllerEntity =
-        swapPlayer(player,newFatControllerEntity(player))
-        --event.element.style = "fatcontroller_selected_button"
-        event.element.caption = "X"
-        trainInfo.train.carriages[1].passenger = player.character
+        guiSettings.fatControllerGui.trainInfo.destroy()
+        event.element.caption = {"text-trains-collapsed"}
       end
-      elseif guiSettings.followEntity ~= nil and trainInfo.train ~= nil and trainInfo.train.valid then
+    elseif event.element.name == "returnToPlayer" then
+      if global.character[event.element.player_index] ~= nil then
         if player.vehicle ~= nil then
           player.vehicle.passenger = nil
         end
-        if guiSettings.followEntity == trainInfo.train.carriages[1] or trainInfo.train.carriages[1].passenger ~= nil then --Go back to player
-          swapPlayer(player, global.character[event.element.player_index])
-          --event.element.style = "fatcontroller_button_style"
-          event.element.caption = "c"
-          if guiSettings.fatControllerButtons ~= nil and guiSettings.fatControllerButtons.returnToPlayer ~= nil then
-            guiSettings.fatControllerButtons.returnToPlayer.destroy()
-          end
-          global.character[event.element.player_index] = nil
-          guiSettings.followEntity = nil
-        else -- Go to different train
+        swapPlayer(player, global.character[event.element.player_index])
+        global.character[event.element.player_index] = nil
+        event.element.destroy()
+        guiSettings.followEntity = nil
+      end
+    elseif endsWith(event.element.name,"_toggleManualMode") then
+      local trainInfo = getTrainInfoFromElementName(trains, event.element.name)
+      if trainInfo ~= nil and trainInfo.train ~= nil and trainInfo.train.valid then
+        trainInfo.train.manual_mode = not trainInfo.train.manual_mode
+        swapCaption(event.element, "ll", ">")
+      end
+    elseif endsWith(event.element.name,"_toggleFollowMode") then
+      local trainInfo = getTrainInfoFromElementName(trains, event.element.name)
+      if trainInfo ~= nil and trainInfo.train ~= nil and trainInfo.train.valid then
+        if global.character[event.element.player_index] == nil then --Move to train
+          if trainInfo.train.carriages[1].passenger ~= nil then
+            player.print({"msg-intrain"})
+        else
+          global.character[event.element.player_index] = player.character
+          guiSettings.followEntity = trainInfo.train.carriages[1] -- HERE
 
-          guiSettings.followEntity = trainInfo.train.carriages[1] -- AND HERE
+          --fatControllerEntity =
+          swapPlayer(player,newFatControllerEntity(player))
           --event.element.style = "fatcontroller_selected_button"
           event.element.caption = "X"
-
           trainInfo.train.carriages[1].passenger = player.character
-          --game.players[1].vehicle = trainInfo.train.carriages[1]
         end
+        elseif guiSettings.followEntity ~= nil and trainInfo.train ~= nil and trainInfo.train.valid then
+          if player.vehicle ~= nil then
+            player.vehicle.passenger = nil
+          end
+          if guiSettings.followEntity == trainInfo.train.carriages[1] or trainInfo.train.carriages[1].passenger ~= nil then --Go back to player
+            swapPlayer(player, global.character[event.element.player_index])
+            --event.element.style = "fatcontroller_button_style"
+            event.element.caption = "c"
+            if guiSettings.fatControllerButtons ~= nil and guiSettings.fatControllerButtons.returnToPlayer ~= nil then
+              guiSettings.fatControllerButtons.returnToPlayer.destroy()
+            end
+            global.character[event.element.player_index] = nil
+            guiSettings.followEntity = nil
+          else -- Go to different train
+
+            guiSettings.followEntity = trainInfo.train.carriages[1] -- AND HERE
+            --event.element.style = "fatcontroller_selected_button"
+            event.element.caption = "X"
+
+            trainInfo.train.carriages[1].passenger = player.character
+            --game.players[1].vehicle = trainInfo.train.carriages[1]
+          end
+        end
+
       end
-
-    end
-  elseif event.element.name == "page_back" then
-    if guiSettings.page > 1 then
-      guiSettings.page = guiSettings.page - 1
-      --global.fatControllerGui.trainInfo.trainInfoControls.page_number.caption = global.guiSettings.page
-      --newTrainInfoWindow(global.fatControllerGui, global.guiSettings)
-      --refreshTrainInfoGui(global.trains, global.fatControllerGui.trainInfo, global.guiSettings)
-      newInfoWindow = true
-      refreshGui = true
-    end
-  elseif event.element.name == "page_forward" then
-    if guiSettings.page < getPageCount(trains, guiSettings) then
-      guiSettings.page = guiSettings.page + 1
-      --debugLog(global.guiSettings.page)
-      --newTrainInfoWindow(global.fatControllerGui, global.guiSettings)
-      --refreshTrainInfoGui(global.trains, global.fatControllerGui.trainInfo, global.guiSettings)
-      newInfoWindow = true
-      refreshGui = true
-    end
-  elseif event.element.name == "page_number" then
-    togglePageSelectWindow(player.gui.center, guiSettings)
-  elseif event.element.name == "pageSelectOK" then
-    local gui = player.gui.center.pageSelect
-    if gui ~= nil then
-
-      local newInt = tonumber(gui.pageSelectValue.text)
-
-      if newInt then
-        if newInt < 1 then
-          newInt = 1
-        elseif newInt > 50 then
-          newInt = 50
-        end
-        guiSettings.displayCount = newInt
-        guiSettings.pageCount = getPageCount(trains, guiSettings)
-        guiSettings.page = 1
-        refreshGui = true
+    elseif event.element.name == "page_back" then
+      if guiSettings.page > 1 then
+        guiSettings.page = guiSettings.page - 1
+        --global.fatControllerGui.trainInfo.trainInfoControls.page_number.caption = global.guiSettings.page
+        --newTrainInfoWindow(global.fatControllerGui, global.guiSettings)
+        --refreshTrainInfoGui(global.trains, global.fatControllerGui.trainInfo, global.guiSettings)
         newInfoWindow = true
-      else
-        player.print({"msg-notanumber"})
+        refreshGui = true
       end
-      gui.destroy()
-    end
-  elseif event.element.name == "toggleStationFilter" then
-    guiSettings.stationFilterList = buildStationFilterList(trains)
-    toggleStationFilterWindow(player.gui.center, guiSettings)
-  elseif event.element.name == "clearStationFilter" or event.element.name == "stationFilterClear" then
-    if guiSettings.activeFilterList ~= nil then
-      guiSettings.activeFilterList = nil
+    elseif event.element.name == "page_forward" then
+      if guiSettings.page < getPageCount(trains, guiSettings) then
+        guiSettings.page = guiSettings.page + 1
+        --debugLog(global.guiSettings.page)
+        --newTrainInfoWindow(global.fatControllerGui, global.guiSettings)
+        --refreshTrainInfoGui(global.trains, global.fatControllerGui.trainInfo, global.guiSettings)
+        newInfoWindow = true
+        refreshGui = true
+      end
+    elseif event.element.name == "page_number" then
+      togglePageSelectWindow(player.gui.center, guiSettings)
+    elseif event.element.name == "pageSelectOK" then
+      local gui = player.gui.center.pageSelect
+      if gui ~= nil then
 
-      rematchStationList = true
-      newInfoWindow = true
-      refreshGui = true
-    end
-    if player.gui.center.stationFilterWindow ~= nil then
-      player.gui.center.stationFilterWindow.destroy()
-    end
-  elseif event.element.name == "stationFilterOK" then
-    local gui = player.gui.center.stationFilterWindow
-    if gui ~= nil and gui.checkboxGroup ~= nil then
-      local newFilter = {}
-      local listEmpty = true
-      for station,value in pairs(guiSettings.stationFilterList) do
-        local checkboxA = gui.checkboxGroup[station .. "_stationFilter"]
-        if checkboxA ~= nil and checkboxA.state then
-          listEmpty = false
-          --debugLog(station)
-          newFilter[station] = true
+        local newInt = tonumber(gui.pageSelectValue.text)
+
+        if newInt then
+          if newInt < 1 then
+            newInt = 1
+          elseif newInt > 50 then
+            newInt = 50
+          end
+          guiSettings.displayCount = newInt
+          guiSettings.pageCount = getPageCount(trains, guiSettings)
+          guiSettings.page = 1
+          refreshGui = true
+          newInfoWindow = true
+        else
+          player.print({"msg-notanumber"})
+        end
+        gui.destroy()
+      end
+    elseif event.element.name == "toggleStationFilter" then
+      guiSettings.stationFilterList = buildStationFilterList(trains)
+      toggleStationFilterWindow(player.gui.center, guiSettings)
+    elseif event.element.name == "clearStationFilter" or event.element.name == "stationFilterClear" then
+      if guiSettings.activeFilterList ~= nil then
+        guiSettings.activeFilterList = nil
+
+        rematchStationList = true
+        newInfoWindow = true
+        refreshGui = true
+      end
+      if player.gui.center.stationFilterWindow ~= nil then
+        player.gui.center.stationFilterWindow.destroy()
+      end
+    elseif event.element.name == "stationFilterOK" then
+      local gui = player.gui.center.stationFilterWindow
+      if gui ~= nil and gui.checkboxGroup ~= nil then
+        local newFilter = {}
+        local listEmpty = true
+        for station,value in pairs(guiSettings.stationFilterList) do
+          local checkboxA = gui.checkboxGroup[station .. "_stationFilter"]
+          if checkboxA ~= nil and checkboxA.state then
+            listEmpty = false
+            --debugLog(station)
+            newFilter[station] = true
+          end
+        end
+        if not listEmpty then
+          guiSettings.activeFilterList = newFilter
+
+          --glo.filteredTrains = buildFilteredTrainInfoList(global.trains, global.guiSettings.activeFilterList)
+        else
+          guiSettings.activeFilterList = nil
+        end
+
+        gui.destroy()
+        guiSettings.page = 1
+        rematchStationList = true
+        newInfoWindow = true
+        refreshGui = true
+      end
+    elseif endsWith(event.element.name,"_stationFilter") then
+      local stationName = string.gsub(event.element.name, "_stationFilter", "")
+      if event.element.state then
+        if guiSettings.activeFilterList == nil then
+          guiSettings.activeFilterList = {}
+        end
+
+        guiSettings.activeFilterList[stationName] = true
+      elseif guiSettings.activeFilterList ~= nil then
+        guiSettings.activeFilterList[stationName] = nil
+        if tableIsEmpty(guiSettings.activeFilterList) then
+          guiSettings.activeFilterList = nil
         end
       end
-      if not listEmpty then
-        guiSettings.activeFilterList = newFilter
-
-        --glo.filteredTrains = buildFilteredTrainInfoList(global.trains, global.guiSettings.activeFilterList)
-      else
-        guiSettings.activeFilterList = nil
-      end
-
-      gui.destroy()
+      --debugLog(event.element.name)
       guiSettings.page = 1
       rematchStationList = true
       newInfoWindow = true
       refreshGui = true
+      --alarmOK alarmTimeToStation alarmTimeAtSignal alarmNoPath alarmButton
+    elseif event.element.name == "alarmButton" or event.element.name == "alarmOK" then
+      toggleAlarmWindow(player.gui.center, guiSettings)
+    elseif event.element.name == "alarmTimeToStation" then
+      guiSettings.alarm.timeToStation = event.element.state
+    elseif event.element.name == "alarmTimeAtSignal" then
+      guiSettings.alarm.timeAtSignal = event.element.state
+    elseif event.element.name == "alarmNoPath" then
+      guiSettings.alarm.noPath = event.element.state
     end
-  elseif endsWith(event.element.name,"_stationFilter") then
-    local stationName = string.gsub(event.element.name, "_stationFilter", "")
-    if event.element.state then
-      if guiSettings.activeFilterList == nil then
-        guiSettings.activeFilterList = {}
-      end
 
-      guiSettings.activeFilterList[stationName] = true
-    elseif guiSettings.activeFilterList ~= nil then
-      guiSettings.activeFilterList[stationName] = nil
-      if tableIsEmpty(guiSettings.activeFilterList) then
-        guiSettings.activeFilterList = nil
-      end
+    if rematchStationList then
+      filterTrainInfoList(trains, guiSettings.activeFilterList)
+      guiSettings.pageCount = getPageCount(trains, guiSettings)
     end
-    --debugLog(event.element.name)
-    guiSettings.page = 1
-    rematchStationList = true
-    newInfoWindow = true
-    refreshGui = true
-    --alarmOK alarmTimeToStation alarmTimeAtSignal alarmNoPath alarmButton
-  elseif event.element.name == "alarmButton" or event.element.name == "alarmOK" then
-    toggleAlarmWindow(player.gui.center, guiSettings)
-  elseif event.element.name == "alarmTimeToStation" then
-    guiSettings.alarm.timeToStation = event.element.state
-  elseif event.element.name == "alarmTimeAtSignal" then
-    guiSettings.alarm.timeAtSignal = event.element.state
-  elseif event.element.name == "alarmNoPath" then
-    guiSettings.alarm.noPath = event.element.state
-  end
 
-  if rematchStationList then
-    filterTrainInfoList(trains, guiSettings.activeFilterList)
-    guiSettings.pageCount = getPageCount(trains, guiSettings)
-  end
+    if newInfoWindow then
+      newTrainInfoWindow(guiSettings)
+    end
 
-  if newInfoWindow then
-    newTrainInfoWindow(guiSettings)
-  end
-
-  if refreshGui then
-    refreshTrainInfoGui(trains, guiSettings, player.character)
-  end
+    if refreshGui then
+      refreshTrainInfoGui(trains, guiSettings, player.character)
+    end
+  end)
+  if err then debugDump(err,true) end
 end
 
 -- function swapStyle(guiElement, styleA, styleB)
