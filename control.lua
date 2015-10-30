@@ -175,8 +175,6 @@ end
 onTickAfterUnlocked = function(event)
   local status, err = pcall(function()
     if event.tick%60==13 then
-      pageCount = -1
-
       local updateGui = false
       for i,guiSettings in pairs(global.guiSettings) do
         if guiSettings.fatControllerGui ~= nil and guiSettings.fatControllerGui.trainInfo ~= nil then
@@ -416,10 +414,7 @@ function on_train_changed_state(event)
     local train = event.train
     local entity = train.carriages[1]
 
-    if global.trainsByForce[entity.force.name] == nil then
-      global.trainsByForce[entity.force.name] = {}
-    end
-    trains = global.trainsByForce[entity.force.name]
+    local trains = global.trainsByForce[entity.force.name]
     local trainInfo = getTrainInfoOrNewFromEntity(trains, entity)
     if trainInfo ~= nil then
       local newtrain = false
@@ -678,7 +673,6 @@ function swapCaption(guiElement, captionA, captionB)
       guiElement.caption = captionA
     end
   end
-
 end
 
 function tableIsEmpty(tableA)
@@ -702,20 +696,15 @@ function toggleStationFilterWindow(gui, guiSettings)
         else
           window.checkboxGroup.add({type="checkbox", name=name .. "_stationFilter", caption=name, state=false}) --style="filter_group_button_style"})
         end
-
-
       end
       window.add({type="flow", name="buttonFlow"})
       window.buttonFlow.add({type="button", name="stationFilterClear", caption={"msg-Clear"}})
       window.buttonFlow.add({type="button", name="stationFilterOK", caption={"msg-OK"}})
-
     else
       gui.stationFilterWindow.destroy()
     end
   end
 end
-
-
 
 function togglePageSelectWindow(gui, guiSettings)
   if gui ~= nil then
@@ -860,72 +849,47 @@ function removeTrainInfoFromEntity(trains, entity)
 end
 
 function getHighestInventoryCount(trainInfo)
-  local inventry = nil
+  local inventory = nil
 
   if trainInfo ~= nil and trainInfo.train ~= nil and trainInfo.train.valid and trainInfo.train.carriages ~= nil then
     local itemsCount = 0
     local largestItem = {}
-    local items = {}
-
-
+    local items = trainInfo.train.get_contents() or {}
 
     for i, carriage in pairs(trainInfo.train.carriages) do
-      if carriage ~= nil and carriage.valid and carriage.type == "cargo-wagon" then
-        if carriage.name == "rail-tanker" then
-          debugLog("Looking for Oil!")
-          local liquid = remote.call("railtanker","getLiquidByWagon",carriage)
-          if liquid ~= nil and (largestItem.count == nil or liquid.amount > largestItem.count) then
-            debugLog("Oil!")
-            local name = liquid.type
-            local count = math.floor(liquid.amount)
-            if name then
-              if items[name] ~= nil then
-                items[name] = items[name] + count
-              else
-                items[name] = count
-                itemsCount = itemsCount + 1
-              end
-              if largestItem.count == nil or largestItem.count < items[name] then
-                largestItem.name = name
-                largestItem.count = items[name]
-              end
+      if carriage and carriage.valid and carriage.name == "rail-tanker" then
+        debugLog("Looking for Oil!")
+        local liquid = remote.call("railtanker","getLiquidByWagon",carriage)
+        if liquid then
+          debugLog("Liquid!")
+          local name = liquid.type
+          local count = math.floor(liquid.amount)
+          if name then
+            if not items[name] then
+              items[name] = 0
             end
-          end
-        else
-          local inv = carriage.get_inventory(1)
-          local contents = inv.get_contents()
-          for name, count in pairs(contents) do
-            if items[name] ~= nil then
-              items[name] = items[name] + count
-            else
-              items[name] = count
-              itemsCount = itemsCount + 1
-            end
-            if largestItem.count == nil or largestItem.count < items[name] then
-              largestItem.name = name
-              largestItem.count = items[name]
-            end
+            items[name] = items[name] + count
           end
         end
       end
-
+    end
+    for name, count in pairs(items) do
+      if largestItem.count == nil or largestItem.count < items[name] then
+        largestItem.name = name
+        largestItem.count = items[name]
+      end
+      itemsCount = itemsCount + 1
     end
 
     if largestItem.name ~= nil then
-      --local displayName = game.get_localised_item_name(largestItem.name)
-      -- if startsWith(displayName, "Unknown-key") then
-      -- displayName = largestItem.name
-      -- end
-      local displayName = largestItem.name
-      inventory = displayName .. ": " .. largestItem.count
-      if itemsCount > 1 then
-        inventory = inventory .. "..."
-      end
+      local isItem = game.item_prototypes[largestItem.name]
+      local displayName = isItem and isItem.localised_name or {"", largestItem.name}
+      local suffix = itemsCount > 1 and "..." or ""
+      inventory = {"", displayName,": ",largestItem.count, suffix}
     else
       inventory = ""
     end
   end
-  debugLog("inventory: " ..  inventory)
   return inventory
 end
 
