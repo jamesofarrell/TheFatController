@@ -58,7 +58,11 @@ local function on_init()
 end
 
 local function on_load()
--- set metatables, register conditional event handlers, local references to global
+  if global.unlocked then
+    script.on_event(defines.events.on_train_changed_state, on_train_changed_state)
+    script.on_event(defines.events.on_tick, onTickAfterUnlocked)
+    script.on_event(defines.events.on_gui_click, on_gui_click)
+  end
 end
 
 -- run once
