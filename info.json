@@ -5,5 +5,5 @@
 	"title":"The Fat Controller",
 	"homepage":"http://en.wikipedia.org/wiki/The_Fat_Controller",
 	"description":"A conductor of trains.",
-	"dependencies": ["base >= 0.12.11"]
+	"dependencies": ["base >= 0.12.12"]
 }
