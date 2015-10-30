@@ -73,12 +73,7 @@ local function on_configuration_changed(data)
   if data.mod_changes[MOD_NAME] then
     local newVersion = data.mod_changes[MOD_NAME].new_version
     local oldVersion = data.mod_changes[MOD_NAME].old_version
-    -- mod was added to existing save
-    if not oldVersion then
-      init_global()
-      init_forces()
-      init_players()
-    else
+    if oldVersion then
       if oldVersion < "0.3.12" then
         -- Kill all old versions of TFC
         if global.fatControllerGui ~= nil or global.fatControllerButtons ~= nil then
@@ -93,7 +88,13 @@ local function on_configuration_changed(data)
       init_global()
       init_forces()
       init_players()
+      if oldVersion < "0.3.13" then
+        findTrains()
+      end
     end
+    init_global()
+    init_forces()
+    init_players()
     global.version = newVersion
   end
   --check for other mods
@@ -1375,6 +1376,7 @@ function pairsByKeys (t, f)
   end
   return iter
 end
+
 function debugDump(var, force)
   if false or force then
     for i,player in pairs(game.players) do
@@ -1388,10 +1390,38 @@ function debugDump(var, force)
     end
   end
 end
+
 function saveVar(var, name)
   local var = var or global
   local n = name or ""
   game.write_file("FAT"..n..".lua", serpent.block(var, {name="global"}))
+end
+
+function findTrains()
+
+  -- create shorthand object for primary game surface
+  local surface = game.surfaces['nauvis']
+
+  -- determine map size
+  local min_x, min_y, max_x, max_y = 0, 0, 0, 0
+  for c in surface.get_chunks() do
+    if c.x < min_x then
+      min_x = c.x
+    elseif c.x > max_x then
+      max_x = c.x
+    end
+    if c.y < min_y then
+      min_y = c.y
+    elseif c.y > max_y then
+      max_y = c.y
+    end
+  end
+
+  -- create bounding box covering entire generated map
+  local bounds = {{min_x*32,min_y*32},{max_x*32,max_y*32}}
+  for _, loco in pairs(surface.find_entities_filtered{area=bounds, type="locomotive"}) do
+    getTrainInfoOrNewFromEntity(global.trainsByForce[loco.force.name], loco)
+  end
 end
 
 remote.add_interface("fat",
