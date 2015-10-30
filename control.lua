@@ -74,7 +74,7 @@ local function on_configuration_changed(data)
     local newVersion = data.mod_changes[MOD_NAME].new_version
     local oldVersion = data.mod_changes[MOD_NAME].old_version
     if oldVersion then
-      if oldVersion < "0.3.12" then
+      if oldVersion < "0.3.14" then
         -- Kill all old versions of TFC
         if global.fatControllerGui ~= nil or global.fatControllerButtons ~= nil then
           destroyGui(global.fatControllerGui)
@@ -85,16 +85,13 @@ local function on_configuration_changed(data)
         end
         global = nil
       end
-      init_global()
-      init_forces()
-      init_players()
-      if oldVersion < "0.3.13" then
-        findTrains()
-      end
     end
     init_global()
     init_forces()
     init_players()
+    if not oldVersion or oldVersion < "0.3.14" then
+      findTrains()
+    end
     global.version = newVersion
   end
   --check for other mods
@@ -437,6 +434,19 @@ function on_train_changed_state(event)
     end
   end)
   if err then debugDump(err,true) end
+end
+
+function getTrainInfoOrNewFromTrain(trains, train)
+  if trains ~= nil then
+    for i, trainInfo in pairs(trains) do
+      if trainInfo ~= nil and trainInfo.train and trainInfo.train.valid and train == trainInfo.train then
+        return trainInfo
+      end
+    end
+    local newTrainInfo = getNewTrainInfo(train)
+    table.insert(trains, newTrainInfo)
+    return newTrainInfo
+  end
 end
 
 function getTrainInfoOrNewFromEntity(trains, entity)
@@ -1420,7 +1430,7 @@ function findTrains()
   -- create bounding box covering entire generated map
   local bounds = {{min_x*32,min_y*32},{max_x*32,max_y*32}}
   for _, loco in pairs(surface.find_entities_filtered{area=bounds, type="locomotive"}) do
-    getTrainInfoOrNewFromEntity(global.trainsByForce[loco.force.name], loco)
+    getTrainInfoOrNewFromTrain(global.trainsByForce[loco.force.name], loco.train)
   end
 end
 
