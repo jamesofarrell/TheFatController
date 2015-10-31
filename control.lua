@@ -40,9 +40,10 @@ local function init_force(force)
   if force.technologies["rail-signals"].researched then
     global.unlockedByForce[force.name] = true
     global.unlocked = true
-    script.on_event(defines.events.on_train_changed_state, on_train_changed_state)
-    script.on_event(defines.events.on_tick, onTickAfterUnlocked)
-    script.on_event(defines.events.on_gui_click, on_gui_click)
+    register_events()
+    for i,p in pairs(force.players) do
+      init_player(p)
+    end
   end
 end
 
@@ -59,9 +60,7 @@ end
 
 local function on_load()
   if global.unlocked then
-    script.on_event(defines.events.on_train_changed_state, on_train_changed_state)
-    script.on_event(defines.events.on_tick, onTickAfterUnlocked)
-    script.on_event(defines.events.on_gui_click, on_gui_click)
+    register_events()
   end
 end
 
@@ -82,6 +81,7 @@ local function on_configuration_changed(data)
         end
         for i,p in pairs(game.players) do
           destroyGui(p.gui.top.fatControllerButtons)
+          destroyGui(p.gui.left.fatController)
         end
         global = nil
       end
@@ -115,11 +115,17 @@ script.on_event(defines.events.on_player_created, on_player_created)
 script.on_event(defines.events.on_force_created, on_force_created)
 script.on_event(defines.events.on_forces_merging, on_forces_merging)
 
+function register_events()
+  script.on_event(defines.events.on_train_changed_state, on_train_changed_state)
+  script.on_event(defines.events.on_tick, onTickAfterUnlocked)
+  script.on_event(defines.events.on_gui_click, on_gui_click)
+end
+
 --Called if tech is unlocked
 function init_gui(player)
   debugLog("Init: " .. player.name .. " - " .. player.force.name)
-  if player.gui.left.fatController ~= nil then
-    player.gui.left.fatController.destroy()
+  if player.gui.top.fatControllerButtons ~= nil then
+    return
   end
 
   local guiSettings = global.guiSettings[player.index]
@@ -162,12 +168,10 @@ script.on_event(defines.events.on_research_finished, function(event)
 end)
 
 function on_research_finished(event)
-  if event.research.name == "rails-signals" then
+  if event.research.name == "rail-signals" then
     global.unlockedByForce[event.research.force.name] = true
     global.unlocked = true
-    script.on_event(defines.events.on_train_changed_state, on_train_changed_state)
-    script.on_event(defines.events.on_tick, onTickAfterUnlocked)
-    script.on_event(defines.events.on_gui_click, on_gui_click)
+    register_events() ;
     for _, p in pairs(event.research.force.players) do
       init_gui(p)
     end
